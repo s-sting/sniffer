@@ -77,5 +77,60 @@ def Simple_sniffer_for_https(count):
         json.dump(result, file, indent=2, ensure_ascii=False)
 
 
+def sniffer_for_dns(count):
+    pkts = sniff(filter="port 53", count=count)
+
+    result = {
+        "capture_info": {
+            "packet_count": count,
+            "filter": "port 53",
+            "note": "Только DNS A запросы (type=1, class=1)"
+        },
+        "dns_a_queries": []
+    }
+
+    for i, pkt in enumerate(pkts):
+        if (pkt.haslayer(DNS)) and (pkt.getlayer(DNS).qr == 0) and (pkt.getlayer(DNS).qd.qtype == 1) and (
+                pkt.getlayer(DNS).qd.qclass == 1):
+
+            clientIP = pkt.getlayer(IP).src
+            serverIP = pkt.getlayer(IP).dst
+
+            if pkt.haslayer(UDP):
+                clientPort = pkt.getlayer(UDP).sport
+                protocol = "UDP"
+            elif pkt.haslayer(TCP):
+                clientPort = pkt.getlayer(TCP).sport
+                protocol = "TCP"
+
+            clientDNSQueryID = pkt.getlayer(DNS).id
+            clientDNSQuery = pkt.getlayer(DNS).qd.qname.decode('utf-8') if isinstance(pkt.getlayer(DNS).qd.qname,bytes) else str(pkt.getlayer(DNS).qd.qname)
+
+            query_info = {
+                "index": i + 1,
+                "timestamp": time.time(),
+                "client_ip": clientIP,
+                "server_ip": serverIP,
+                "client_port": clientPort,
+                "protocol": protocol,
+                "query_id": clientDNSQueryID,
+                "query_name": clientDNSQuery,
+                "query_type": 1,
+                "query_class": 1
+            }
+
+            result["dns_a_queries"].append(query_info)
+
+    with open("logs.json", "w", encoding='utf-8') as file:
+        json.dump(result, file, indent=2, ensure_ascii=False)
+
+    print(f"\n✅ Найдено {len(result['dns_a_queries'])} DNS A запросов из {count} пакетов")
+    return result
+
+
+
+
+
 #Simply_sniffer_for_http(10)
-Simple_sniffer_for_https(50)
+#Simple_sniffer_for_https(50)
+sniffer_for_dns(10)
