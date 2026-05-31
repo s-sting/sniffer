@@ -1,0 +1,7 @@
+{
+  "capture_info": {
+    "packet_count": 50,
+    "filter": "tcp port 443"
+  },
+  "sni_results": {}
+}
