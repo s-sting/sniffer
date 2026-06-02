@@ -1,9 +1,10 @@
+
 from scapy.all import *
 import json
 import struct
 
 
-def Simply_sniffer_for_http(count):
+def sniffer_for_http(count):
     pkts = sniff(filter="tcp port 80", count=count)
 
     result = {
@@ -34,7 +35,7 @@ def Simply_sniffer_for_http(count):
     print(f"Сохранено {count} пакетов в logs.json")
 
 
-def Simple_sniffer_for_https(count):
+def sniffer_for_https(count):
     pkts = sniff(filter="tcp port 443", count=count)
     load_layer("tls")
 
@@ -155,7 +156,74 @@ def sniffer_for_arp(count):
         json.dump(result, file, indent=2, ensure_ascii=False)
 
 
-# Simply_sniffer_for_http(10)
-# Simple_sniffer_for_https(50)
-#sniffer_for_dns(10)
-sniffer_for_arp(10)
+print("Sniffer by sting")
+print("Type 'help' or 'help <command>' for more information")
+
+def show_help(command = None):
+    if command is None:
+        print("\n=== SNIFFER HELP ===")
+        print("Available commands:")
+        print("  http [count]  - Sniff HTTP packets (default: 10)")
+        print("  https [count] - Sniff HTTPS packets (default: 10)")
+        print("  dns [count]   - Sniff DNS packets (default: 10)")
+        print("  arp [count]   - Sniff ARP packets (default: 5)")
+        print("  help [command] - Show this help message")
+        print("  exit          - Exit the sniffer")
+        print("\nExamples:")
+        print("  sniffer> http        # Sniff 10 HTTP packets")
+        print("  sniffer> https 20    # Sniff 20 HTTPS packets")
+        print("  sniffer> help http   # Show help for HTTP command")
+    elif command == "http":
+        print("HTTP Sniffer: Captures HTTP packets")
+        print("Usage: http [count]")
+        print("  count - number of packets to capture (default: 10)")
+    elif command == "https":
+        print("HTTPS Sniffer: Captures HTTPS packets")
+        print("Usage: https [count]")
+        print("  count - number of packets to capture (default: 10)")
+    elif command == "dns":
+        print("DNS Sniffer: Captures DNS queries and responses")
+        print("Usage: dns [count]")
+        print("  count - number of packets to capture (default: 10)")
+    elif command == "arp":
+        print("ARP Sniffer: Captures ARP requests and replies")
+        print("Usage: arp [count]")
+        print("  count - number of packets to capture (default: 5)")
+    else:
+        print(f"Unknown command: {command}")
+
+while 1:
+    command = input("sniffer> ").strip().lower().split()
+    if not command:
+        continue
+    match command[0]:
+        case "http":
+            count = int(command[1]) if len(command) > 1 else 10
+            print("Running...")
+            sniffer_for_http(count)
+            print("The process is completed ")
+        case "https":
+            count = int(command[1]) if len(command) > 1 else 10
+            print("Running...")
+            sniffer_for_https(count)
+            print("The process is completed ")
+        case "dns":
+            count = int(command[1]) if len(command) > 1 else 10
+            print("Running...")
+            sniffer_for_dns(count)
+            print("The process is completed ")
+        case "arp":
+            count = int(command[1]) if len(command) > 1 else 5
+            print("Running...")
+            sniffer_for_arp(count)
+            print("The process is completed ")
+        case "help" | "-help" | "--help" | "-h":
+            if len(command) > 1:
+                show_help(command[1])
+            else:
+                show_help()
+        case "exit":
+            break
+        case _:
+            print("Unknown command")
+            print("Type 'help' for available commands")
