@@ -4,7 +4,6 @@ import struct
 
 
 def Simply_sniffer_for_http(count):
-
     pkts = sniff(filter="tcp port 80", count=count)
 
     result = {
@@ -36,7 +35,6 @@ def Simply_sniffer_for_http(count):
 
 
 def Simple_sniffer_for_https(count):
-
     pkts = sniff(filter="tcp port 443", count=count)
     load_layer("tls")
 
@@ -60,10 +58,7 @@ def Simple_sniffer_for_https(count):
                                 sni_results[key] = []
                             if sni not in sni_results[key]:
                                 sni_results[key].append(sni)
-
-                            print(f"Найден SNI: {sni} (from {ip_src} to {ip_dst})")
                             break
-
 
     result = {
         "capture_info": {
@@ -104,7 +99,9 @@ def sniffer_for_dns(count):
                 protocol = "TCP"
 
             clientDNSQueryID = pkt.getlayer(DNS).id
-            clientDNSQuery = pkt.getlayer(DNS).qd.qname.decode('utf-8') if isinstance(pkt.getlayer(DNS).qd.qname,bytes) else str(pkt.getlayer(DNS).qd.qname)
+            clientDNSQuery = pkt.getlayer(DNS).qd.qname.decode('utf-8') if isinstance(pkt.getlayer(DNS).qd.qname,
+                                                                                      bytes) else str(
+                pkt.getlayer(DNS).qd.qname)
 
             query_info = {
                 "index": i + 1,
@@ -124,13 +121,41 @@ def sniffer_for_dns(count):
     with open("logs.json", "w", encoding='utf-8') as file:
         json.dump(result, file, indent=2, ensure_ascii=False)
 
-    print(f"\n✅ Найдено {len(result['dns_a_queries'])} DNS A запросов из {count} пакетов")
     return result
 
 
+def sniffer_for_arp(count):
+    result = {
+        "capture_info": {
+            "packet_count": count,
+            "filter": "ARP",
+            "note": ""
+        },
+        "ARP_a_queries": []
+    }
+    pkts = sniff(filter="arp", count=count)
+
+    for pkt in pkts:
+        if ARP in pkt:
+            if pkt[ARP].op == 1:
+                query_info = {
+                    "type": "request",
+                    "ARPRequest": pkt[ARP].pdst,  # кто хочет узнать
+                    "ARPsender": pkt[ARP].psrc  # кто спрашивает
+                }
+                result["ARP_a_queries"].append(query_info)
+            elif pkt[ARP].op == 2:
+                query_info = {
+                    "type": "reply",
+                    "ARPsender": pkt[ARP].psrc,   # IP ответчика
+                    "MACsender": pkt[ARP].hwsrc   # MAC ответчика
+                }
+                result["ARP_a_queries"].append(query_info)
+    with open("logs.json", "w", encoding='utf-8') as file:
+        json.dump(result, file, indent=2, ensure_ascii=False)
 
 
-
-#Simply_sniffer_for_http(10)
-#Simple_sniffer_for_https(50)
-sniffer_for_dns(10)
+# Simply_sniffer_for_http(10)
+# Simple_sniffer_for_https(50)
+#sniffer_for_dns(10)
+sniffer_for_arp(10)
