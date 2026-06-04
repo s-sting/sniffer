@@ -1,7 +1,16 @@
 {
   "capture_info": {
-    "packet_count": 50,
-    "filter": "tcp port 443"
+    "protocol": "ARP",
+    "packet_count": 1,
+    "filter": "arp"
   },
-  "sni_results": {}
+  "packets": [
+    {
+      "type": "request",
+      "index": 0,
+      "timestamp": 1780563092.6280375,
+      "ARPRequest": "192.168.1.13",
+      "ARPsender": "192.168.1.1"
+    }
+  ]
 }
