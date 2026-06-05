@@ -12,12 +12,12 @@ class Storage:
 
     def save_result(self, data, filepath):
         self.last_result = data
-        self.history.append({"data": data, "filepath": filepath, "time": datetime.now()})
+        self.history.append(f"filepath {filepath}, time {datetime.now()} ")
         with open(filepath, "w", encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-class BaseSniffer():
+class BaseSniffer(ABC):
     def __init__(self, name, filter_str, storage: Storage):
         self.name = name
         self.filter_str = filter_str
@@ -26,9 +26,32 @@ class BaseSniffer():
     def sniffer(self, count=10):
         pkts = sniff(filter=self.filter_str, count=count)
         result = self.build_result(pkts, count)
-        self.storage.save_result(result, "logs.json")
+        filename = f"logs_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+        self.storage.save_result(result, filename)
 
         return result
+
+    def watch(self):
+        packets = []
+
+        def handler(pkt):
+            packets.append(pkt)
+            process = self.process_pkts(pkt, len(packets) - 1)
+            if process:
+                self.display_print(process)
+
+        try:
+            sniff(filter=self.filter_str, prn=handler, store=False)
+        except KeyboardInterrupt:
+
+            result = self.build_result(packets, len(packets))
+            filename = f"logs_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+            self.storage.save_result(result, filename)
+            return result
+
+    @abstractmethod
+    def display_print(self, process):
+        pass
 
     @abstractmethod
     def process_pkts(self, pkt, index):
@@ -56,6 +79,9 @@ class HTTPsniffer(BaseSniffer):
         if pkt.haslayer(Raw):
             return {"index": index, "data": pkt[Raw].load.decode(errors='ignore')}
         return {"index": index, "data": None}
+
+    def display_print(self, process):
+        print(f"{datetime.now()} {process.get('index')}")
 
 
 class HTTPSsniffer(BaseSniffer):
@@ -89,14 +115,21 @@ class HTTPSsniffer(BaseSniffer):
 
         return None
 
+    def display_print(self, process):
+        print(f"{datetime.now()} SNI: {process.get('sni', '?')}")
+
 
 class DNSsniffer(BaseSniffer):
     def __init__(self, storage):
         super().__init__("DNS", "port 53", storage)
 
     def process_pkts(self, pkt, index):
-        if not (pkt.haslayer(DNS)) and (pkt.getlayer(DNS).qr == 0) and (pkt.getlayer(DNS).qd.qtype == 1) and (
-                pkt.getlayer(DNS).qd.qclass == 1):
+        if not (pkt.haslayer(DNS)):
+            return None
+
+        dns = pkt[DNS]
+
+        if dns.qr != 0 or dns.qd.qtype != 1 or dns.qd.qclass != 1:
             return None
 
         if pkt.haslayer(UDP):
@@ -126,6 +159,9 @@ class DNSsniffer(BaseSniffer):
             "query_class": 1
         }
 
+    def display_print(self, process):
+        print(f"{datetime.now()} Query name: {process.get('query_name', '?')}")
+
 
 class ARPsniffer(BaseSniffer):
     def __init__(self, storage):
@@ -137,7 +173,7 @@ class ARPsniffer(BaseSniffer):
                 return {
                     "type": "request",
                     "index": index,
-                    "timestamp": time.time(),
+                    "timestamp": datetime.now(),
                     "ARPRequest": pkt[ARP].pdst,  # кто хочет узнать
                     "ARPsender": pkt[ARP].psrc  # кто спрашивает
                 }
@@ -145,10 +181,16 @@ class ARPsniffer(BaseSniffer):
                 return {
                     "type": "reply",
                     "index": index,
-                    "timestamp": time.time(),
+                    "timestamp": datetime.now(),
                     "ARPsender": pkt[ARP].psrc,  # IP ответчика
                     "MACsender": pkt[ARP].hwsrc  # MAC ответчика
                 }
+
+    def display_print(self, process):
+        if process['type'] == 'request':
+            print(f"{datetime.now()} ARP: Who has {process.get('ARPRequest', '?')} => {process.get('ARPsender', '?')}")
+        else:
+            print(f"{datetime.now()} ARP: {process.get('ARPsender', '?')} => {process.get('MACsender', '?')}")
 
 
 class SnifferCLI:
@@ -160,10 +202,12 @@ class SnifferCLI:
             "dns": DNSsniffer(self.storage),
             "arp": ARPsniffer(self.storage),
         }
+
     def run(self, protocol, count=10):
         if protocol in self.sniffers:
             return self.sniffers[protocol].sniffer(count)
         print(f"Unknown protocol: {protocol}")
+
 
 def StartPoint():
     cli = SnifferCLI()
@@ -174,16 +218,18 @@ def StartPoint():
         if command is None:
             print("\n=== SNIFFER HELP ===")
             print("Available commands:")
-            print("  http [count]  - Sniff HTTP packets (default: 10)")
-            print("  https [count] - Sniff HTTPS packets (default: 10)")
-            print("  dns [count]   - Sniff DNS packets (default: 10)")
-            print("  arp [count]   - Sniff ARP packets (default: 5)")
-            print("  help [command] - Show this help message")
-            print("  exit          - Exit the sniffer")
+            print("  http [count]   - Sniff HTTP packets (default: 10)")
+            print("  https [count]  - Sniff HTTPS packets (default: 10)")
+            print("  dns [count]    - Sniff DNS packets (default: 10)")
+            print("  arp [count]    - Sniff ARP packets (default: 5)")
+            print("  watch <protocol>  - Continuous capture (Ctrl+C to stop)")
+            print("  history        - Show capture history")
+            print("  help           - Show this help")
+            print("  exit           - Exit the sniffer")
             print("\nExamples:")
-            print("  sniffer> http        # Sniff 10 HTTP packets")
-            print("  sniffer> https 20    # Sniff 20 HTTPS packets")
-            print("  sniffer> help http   # Show help for HTTP command")
+            print("  sniffer> dns 5")
+            print("  sniffer> watch http")
+            print("  sniffer> history")
         elif command == "http":
             print("HTTP Sniffer: Captures HTTP packets")
             print("Usage: http [count]")
@@ -213,16 +259,36 @@ def StartPoint():
                 print("Running...")
                 cli.run(command[0], count)
                 print("The process is completed ")
+            case "watch":
+                if len(command) < 2:
+                    print("Usage: watch <protocol>")
+                else:
+                    protocol = command[1]
+                    if protocol in cli.sniffers:
+                        print(f"Watching {protocol}")
+                        print("Press Ctrl+C to stop")
+                        cli.sniffers[protocol].watch()
+                    else:
+                        print("Unknown protocol")
             case "help" | "-help" | "--help" | "-h":
                 if len(command) > 1:
                     show_help(command[1])
                 else:
                     show_help()
-            case "exit":
+            case "history":
+                if not cli.storage.history:
+                    print("No history yet")
+                else:
+                    count = 0
+                    for i in cli.storage.history:
+                        count += 1
+                        print(count, i)
+            case "exit" | "ex":
                 break
             case _:
                 print("Unknown command")
                 print("Type 'help' for available commands")
+
 
 if __name__ == "__main__":
     StartPoint()
