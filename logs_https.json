@@ -1,9 +1,0 @@
-{
-  "capture_info": {
-    "total_packets": 50,
-    "client_hello_found": 0,
-    "filter": "tcp port 443"
-  },
-  "sni_results": {},
-  "domains_list": []
-}
